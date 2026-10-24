@@ -6,8 +6,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: v1.90.0
-          submodules: recursive
+          repository: SpaiR/imgui-java
+          fetch-depth: 0
+      - name: pin to 1.90.0
+        run: |
+          git tag | grep 1.90 || true
+          T=$(git tag | grep -E '^v?1\.90\.0$' | head -1)
+          echo "using tag: $T"
+          git checkout "$T"
+          git submodule update --init --recursive
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
       - name: gen jni sources
