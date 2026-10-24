@@ -1,0 +1,30 @@
+name: imgui-aarch64
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v1.90.0
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: gen jni sources
+        run: ./gradlew imgui-binding:generateLibs -Denvs=linux -Dlocal
+        continue-on-error: true
+      - name: show tree
+        run: |
+          find imgui-binding/build -name '*.cpp' | head -40
+          find imgui-binding -name 'build-linux64.xml' -exec cat {} \;
+      - name: ndk build
+        run: |
+          set -e
+          TC=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin
+          SRC=imgui-binding/build/jni
+          $TC/aarch64-linux-android26-clang++ -shared -fPIC -O2 -std=c++14 -static-libstdc++ \
+            -I"$SRC" -I"$SRC/imgui" -I"$JAVA_HOME/include" -I"$JAVA_HOME/include/linux" \
+            $(find "$SRC" -name '*.cpp') -o libimgui-java64.so
+          readelf -d libimgui-java64.so | grep NEEDED
+      - uses: actions/upload-artifact@v4
+        with: { name: imgui-aarch64, path: libimgui-java64.so }
