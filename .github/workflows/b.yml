@@ -1,0 +1,46 @@
+name: nativecopy
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - name: build mod
+        run: |
+          set -e
+          mkdir -p stub/net/fabricmc/loader/api/entrypoint src/nativecopy
+          cat > stub/net/fabricmc/loader/api/entrypoint/PreLaunchEntrypoint.java <<'EOF'
+          package net.fabricmc.loader.api.entrypoint;
+          public interface PreLaunchEntrypoint { void onPreLaunch(); }
+          EOF
+          cat > src/nativecopy/Copy.java <<'EOF'
+          package nativecopy;
+          import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
+          import java.nio.file.*;
+          public class Copy implements PreLaunchEntrypoint {
+            public void onPreLaunch() {
+              try {
+                Path src = Paths.get(System.getProperty("pojav.path.minecraft"), "imgui", "libimgui-java64.so");
+                Path dir = Paths.get(System.getProperty("java.io.tmpdir"), "imgui-aarch64");
+                Files.createDirectories(dir);
+                Path dst = dir.resolve("libimgui-java64.so");
+                Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                System.setProperty("imgui.library.path", dir.toString());
+                System.out.println("[nativecopy] copied " + src + " -> " + dst + " (" + Files.size(dst) + " bytes)");
+              } catch (Throwable t) {
+                System.out.println("[nativecopy] failed: " + t);
+                t.printStackTrace();
+              }
+            }
+          }
+          EOF
+          cat > fabric.mod.json <<'EOF'
+          {"schemaVersion":1,"id":"nativecopy","version":"1.0.0","name":"Native Copy","environment":"client","entrypoints":{"preLaunch":["nativecopy.Copy"]},"depends":{"fabricloader":">=0.16.0"}}
+          EOF
+          javac --release 17 -d out/stub stub/net/fabricmc/loader/api/entrypoint/PreLaunchEntrypoint.java
+          javac --release 17 -cp out/stub -d out/cls src/nativecopy/Copy.java
+          jar cf nativecopy.jar fabric.mod.json -C out/cls nativecopy
+          unzip -l nativecopy.jar
+      - uses: actions/upload-artifact@v4
+        with: { name: nativecopy, path: nativecopy.jar }
